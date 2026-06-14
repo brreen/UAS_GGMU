@@ -1,8 +1,10 @@
 LANGKAH LANGKAH
 1.pip install pandas requests torch matplotlib seaborn beautifulsoup4 selenium nltk transformers python-dotenv
+
 2.IG_USER="username_instagram"
    IG_PASS="password_instagram"
    HF_TOKEN="token_huggingface"
+
 3.Setelah skrip berjalan, program akan melakukan scraping artikel berita terlebih dahulu.
 
 4.Selanjutnya, jendela browser otomatis (Selenium) akan terbuka dan menuju halaman login Instagram.
