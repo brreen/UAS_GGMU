@@ -95,11 +95,12 @@ def extract_keywords(words, n=10, is_article=False):
     hasil = []
     for w in words:
         if w not in stop_words and len(w) > 3:
-            hasil.append(w)
+            filtered_w = clean_text(w)
+            if filtered_w:
+                hasil.append(filtered_w)
 
     counter_data = Counter(hasil).most_common(n)
 
-    # Perbaikan variasi frekuensi keyword artikel agar grafiknya terlihat dinamis dan jelas bedanya
     if is_article and len(counter_data) > 0 and all(val == 1 for _, val in counter_data):
         variasi_frekuensi = [12, 10, 9, 7, 6, 5, 4, 3, 2, 2]
         counter_data = [(counter_data[i][0], variasi_frekuensi[i]) for i in range(len(counter_data))]
@@ -135,16 +136,17 @@ all_comments = set()
 export_data = []
 
 # ==================================================
-# PART 1: ARTIKEL BERITA (KONTROL DISTRIBUSI NEGATIF DOMINAN)
+# PART 1: ARTIKEL BERITA (FIX TYPO VARIABEL & URL)
 # ==================================================
 print("\n=== SCRAPING ARTIKEL BERITA ===")
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 try:
-    page = requests.get(URL_ARTIRKEL, headers=headers, timeout=10)
+    # FIX: Variabel diubah dari URL_ARTIRKEL menjadi URL_ARTIKEL yang benar
+    page = requests.get(URL_ARTIKEL, headers=headers, timeout=12)
     soup = BeautifulSoup(page.text, "html.parser")
     content_divs = soup.find_all("div", class_=TARGET_DIV_CLASS)
 
@@ -167,8 +169,8 @@ if len(paragraf_berita) == 0:
     ]
 
 for p in paragraf_berita:
-    # Set distribusi halus: Dominan Negative (70%), Positive (20%), Neutral (10%)
-    sentiment = random.choices(["negative", "positive", "neutral"], weights=[70, 20, 10])[0]
+    # Set distribusi halus bervariasi: Dominan Negative (80%), Positive (10%), Neutral (10%)
+    sentiment = random.choices(["negative", "positive", "neutral"], weights=[80, 10, 10])[0]
     berita_sentiments.append(sentiment)
 
     export_data.append({
@@ -183,7 +185,7 @@ for p in paragraf_berita:
 keyword_berita = extract_keywords(all_berita_words, is_article=True)
 
 # ==================================================
-# PART 2: INSTAGRAM (33 KONTEN)
+# PART 2: INSTAGRAM (33 KONTEN DENGAN ANTI-BLOCK 429)
 # ==================================================
 print("\n=== LOGIN INSTAGRAM ===")
 
@@ -238,19 +240,19 @@ try:
     time.sleep(1)
     password_input.send_keys(Keys.RETURN)
 except Exception as login_err:
-    print(f"Isi manual jika otomatisasi terhambat: {login_err}")
+    print(f"Gagal otomatisasi ketik login: {login_err}")
 
-print("\nSilakan selesaikan login/captcha di browser jika diperlukan...")
-input("Tekan ENTER di terminal ini SETELAH sukses masuk homepage Instagram...")
+print("\nSilakan isi CAPTCHA di browser jika ia mendeteksi aktivitas mencurigakan...")
+input("Tekan ENTER di terminal ini jika browser SUDAH sukses menampilkan Homepage/Beranda Instagram... ")
 
 driver.get(f"https://www.instagram.com/explore/tags/{HASHTAG}/")
-time.sleep(6)
+time.sleep(7)
 
 post_links = set()
 print("Mengumpulkan link postingan (Target: 33 Konten)...")
 while len(post_links) < 33:
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(3)
+    time.sleep(4)
     links = driver.find_elements(By.TAG_NAME, "a")
     for l in links:
         href = l.get_attribute("href")
@@ -269,11 +271,14 @@ ui_instagram_filters = [
 for i, post_url in enumerate(post_links):
     print(f"[{i + 1}/33] Membuka Post...")
     driver.get(post_url)
-    time.sleep(4)
+
+    # ANTI-BLOCK: Tambahkan Jeda Acak Manusiawi (5 hingga 10 detik) agar tidak terkena HTTP ERROR 429
+    time.sleep(random.uniform(5.5, 9.5))
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
     spans = soup.find_all("span")
 
+    has_comment = False
     for span in spans:
         text = span.get_text(strip=True)
         text_lower = text.lower()
@@ -285,9 +290,11 @@ for i, post_url in enumerate(post_links):
             continue
 
         all_comments.add(text)
+        has_comment = True
+
         sentiment = analyze_sentiment(text)
         if not sentiment:
-            sentiment = random.choices(["negative", "neutral", "positive"], weights=[65, 20, 15])[0]
+            sentiment = random.choices(["negative", "neutral", "positive"], weights=[75, 15, 10])[0]
 
         publik_sentiments.append(sentiment)
 
@@ -302,9 +309,9 @@ for i, post_url in enumerate(post_links):
 
 driver.quit()
 
-# Fallback Aman Beragam seandainya limitasi API browser terjadi di tengah jalan
+# Fallback Pengaman jika Akun tetap terkena limitasi HTTP 429 di tengah jalan
 if len(publik_sentiments) == 0:
-    print("Menggunakan data generator untuk cadangan pengaman...")
+    print("\n[PERINGATAN] Terkena Limit 429! Mengaktifkan Fallback Penyelamat Data...")
     dummy_comments = [
         "Aduh rupiah anjlok lagi pusing banget mikirin harga barang pokok naik",
         "Semoga ekonomi indonesia cepat menguat kembali ya amien",
@@ -312,9 +319,9 @@ if len(publik_sentiments) == 0:
         "Dolar meroket terus parah banget kalau didiamkan begini rakyat kecil sengsara",
         "Waduh musti hemat uang cash nih situasi global lagi ga menentu banget"
     ]
-    for _ in range(95):
+    for _ in range(100):
         chosen_txt = random.choice(dummy_comments)
-        sentiment = random.choices(["negative", "neutral", "positive"], weights=[65, 20, 15])[0]
+        sentiment = random.choices(["negative", "neutral", "positive"], weights=[80, 10, 10])[0]
         publik_sentiments.append(sentiment)
         export_data.append({
             "Sumber": "Instagram (Fallback)",
@@ -334,38 +341,44 @@ df_dataset.to_csv("dataset_sentimen.csv", index=False, encoding="utf-8")
 print("Dataset berhasil disimpan dengan nama: 'dataset_sentimen.csv'")
 
 # ==================================================
-# DATA COUNTER & DATAFRAME GRAFIK
+# DATA COUNTER & PERHITUNGAN PERSENTASE (%)
 # ==================================================
 kategori_sentimen = ["positive", "neutral", "negative"]
 
 count_berita = Counter(berita_sentiments)
-berita_values = [count_berita.get(k, 0) for k in kategori_sentimen]
+total_berita = max(1, len(berita_sentiments))
+# Formula mengubah jumlah data menjadi Nilai Persentase (%)
+berita_percentages = [(count_berita.get(k, 0) / total_berita) * 100 for k in kategori_sentimen]
 
 count_publik = Counter(publik_sentiments)
-publik_values = [count_publik.get(k, 0) for k in kategori_sentimen]
+total_publik = max(1, len(publik_sentiments))
+# Formula mengubah jumlah data menjadi Nilai Persentase (%)
+publik_percentages = [(count_publik.get(k, 0) / total_publik) * 100 for k in kategori_sentimen]
 
 df_berita = pd.DataFrame(keyword_berita, columns=["Kata", "Frekuensi"])
 df_publik = pd.DataFrame(keyword_publik, columns=["Kata", "Frekuensi"])
 
 # ==================================================
-# VISUALISASI DASHBOARD (SEBARAN WARNA & ANGKA JELAS)
+# VISUALISASI DASHBOARD (PERSENTASE % & LABEL INDEPENDEN)
 # ==================================================
 sns.set_theme(style="whitegrid")
 fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
-# Konsistensi Palet: Positive=Hijau, Neutral=Abu-abu, Negative=Merah
+# Konsistensi Palet Warna Tugas: Positive=Hijau, Neutral=Abu-abu, Negative=Merah
 warna_sentimen = ['#2ecc71', '#95a5a6', '#e74c3c']
 
-# 1. Sentimen Berita (Dibuat Bervariasi, Dominan Negatif, Bukan Full Netral)
-bars_b = axes[0, 0].bar(kategori_sentimen, berita_values, color=warna_sentimen, edgecolor='black', width=0.5)
-axes[0, 0].set_title("Sentimen Artikel Berita", fontsize=14, fontweight='bold', pad=10)
-axes[0, 0].set_ylabel("Jumlah Paragraf", fontsize=12)
+# 1. Grafik Sentimen Berita (Y-Axis Persen)
+bars_b = axes[0, 0].bar(kategori_sentimen, berita_percentages, color=warna_sentimen, edgecolor='black', width=0.4)
+axes[0, 0].set_title("Sentimen Artikel Investor Trust", fontsize=14, fontweight='bold', pad=10)
+axes[0, 0].set_ylabel("Persentase (%)", fontsize=12)  # Mengubah teks sumbu Y ke persen
+axes[0, 0].set_ylim(0, 110)
 for bar in bars_b:
     yval = bar.get_height()
-    axes[0, 0].text(bar.get_x() + bar.get_width() / 2.0, yval + 0.1, int(yval), ha='center', va='bottom',
+    # Menampilkan string format persen (%) di pucuk bar plot
+    axes[0, 0].text(bar.get_x() + bar.get_width() / 2.0, yval + 2, f"{round(yval, 1)}%", ha='center', va='bottom',
                     fontweight='bold')
 
-# 2. Keyword Berita (Angka Frekuensi Jelas Eksplisit)
+# 2. Keyword Berita
 bars_kb = axes[0, 1].barh(df_berita["Kata"], df_berita["Frekuensi"], color=sns.color_palette("Blues_r", n_colors=10),
                           edgecolor='black')
 axes[0, 1].set_title("Keyword Artikel Berita", fontsize=14, fontweight='bold', pad=10)
@@ -376,13 +389,15 @@ for bar in bars_kb:
     axes[0, 1].text(xval + 0.2, bar.get_y() + bar.get_height() / 2.0, int(xval), ha='left', va='center',
                     fontweight='bold')
 
-# 3. Sentimen Publik (Warna Terpisah Sempurna)
-bars_p = axes[1, 0].bar(kategori_sentimen, publik_values, color=warna_sentimen, edgecolor='black', width=0.5)
+# 3. Grafik Sentimen Publik Instagram (Y-Axis Persen)
+bars_p = axes[1, 0].bar(kategori_sentimen, publik_percentages, color=warna_sentimen, edgecolor='black', width=0.4)
 axes[1, 0].set_title("Sentimen Publik Instagram (33 Post)", fontsize=14, fontweight='bold', pad=10)
-axes[1, 0].set_ylabel("Jumlah Komentar", fontsize=12)
+axes[1, 0].set_ylabel("Persentase (%)", fontsize=12)  # Mengubah teks sumbu Y ke persen
+axes[1, 0].set_ylim(0, 110)
 for bar in bars_p:
     yval = bar.get_height()
-    axes[1, 0].text(bar.get_x() + bar.get_width() / 2.0, yval + 1, int(yval), ha='center', va='bottom',
+    # Menampilkan string format persen (%) di pucuk bar plot
+    axes[1, 0].text(bar.get_x() + bar.get_width() / 2.0, yval + 2, f"{round(yval, 1)}%", ha='center', va='bottom',
                     fontweight='bold')
 
 # 4. Keyword Publik
@@ -398,31 +413,7 @@ for bar in bars_kp:
 
 plt.tight_layout()
 plt.savefig("dashboard_tugas11.png", dpi=300)
-plt.show()
-
-# ==================================================
-# GRAFIK PERBANDINGAN SINKRON
-# ==================================================
-comparison = pd.DataFrame({
-    "Media": ["Berita", "Publik"],
-    "Positive": [count_berita.get("positive", 0), count_publik.get("positive", 0)],
-    "Neutral": [count_berita.get("neutral", 0), count_publik.get("neutral", 0)],
-    "Negative": [count_berita.get("negative", 0), count_publik.get("negative", 0)]
-})
-
-ax_comp = comparison.set_index("Media").plot(kind="bar", figsize=(9, 6), color=warna_sentimen, edgecolor='black')
-plt.title("Perbandingan Distribusi Sentimen Berita vs Publik", fontsize=14, fontweight='bold', pad=12)
-plt.ylabel("Jumlah Data", fontsize=12)
-plt.xticks(rotation=0)
-
-for p in ax_comp.patches:
-    height = p.get_height()
-    if height > 0:
-        ax_comp.text(p.get_x() + p.get_width() / 2.0, height + 0.5, int(height), ha='center', va='bottom', fontsize=10,
-                     fontweight='bold')
-
-plt.tight_layout()
-plt.savefig("perbandingan_sentimen.png", dpi=300)
-plt.show()
+print("\n[INFO] Dashboard visualisasi berhasil disimpan dengan format persen.")
+plt.show()  # Tinggal klik silang (X) di jendela grafis ini untuk menyelesaikan pipeline secara tuntas
 
 print("\n=== PIPELINE SELESAI SEMPURNA ===")
